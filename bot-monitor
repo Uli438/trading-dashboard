@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bot-Monitor</title>
+<style>
+  :root{--bg:#daeeff;--card:#ffffff;--border:#2c2c2c;--green:#1a8a3a;--red:#c62828;--blue:#1565c0;--amber:#e09b00;--muted:#5a6b7a;}
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--border);padding:14px;}
+  h1{font-size:21px;margin:0 0 2px;}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:14px;}
+  .card{background:var(--card);border:2px solid var(--border);border-radius:14px;padding:14px;margin-bottom:14px;}
+  .ctitle{font-size:14px;font-weight:800;margin:0 0 10px;}
+  .statusbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .big-badge{font-size:18px;font-weight:800;padding:5px 14px;border-radius:20px;border:2px solid var(--border);}
+  .big-badge.on{background:#e3f5e8;color:var(--green);} .big-badge.off{background:#fdeaea;color:var(--red);}
+  .meta{color:var(--muted);font-size:13px;}
+  .live{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-left:auto;}
+  .sdot{width:11px;height:11px;border-radius:50%;background:var(--muted);} .sdot.ok{background:var(--green);} .sdot.err{background:var(--red);}
+  .stats{display:flex;gap:10px;flex-wrap:wrap;}
+  .stat{flex:1;min-width:130px;background:#f3f9ff;border:2px solid var(--border);border-radius:11px;padding:11px 13px;}
+  .stat .lbl{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;}
+  .stat .val{font-size:23px;font-weight:800;margin-top:3px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;padding:6px 4px;border-bottom:2px solid var(--border);}
+  td{padding:8px 4px;border-bottom:1px solid #e3edf5;}
+  .tag{font-weight:800;padding:1px 8px;border-radius:6px;font-size:12px;}
+  .tag.buy{background:#e3f5e8;color:var(--green);} .tag.sell{background:#fdeaea;color:var(--red);}
+  .log{max-height:240px;overflow-y:auto;font-size:12.5px;font-family:ui-monospace,Menlo,Consolas,monospace;}
+  .log-entry{padding:5px 4px;border-bottom:1px solid #eef3f8;color:#33414f;} .log-entry:last-child{border-bottom:none;}
+  .log-entry .t{color:var(--muted);}
+  .empty{color:var(--muted);font-size:13px;padding:8px 0;}
+  .setup{background:#fff8e8;border:2px solid var(--amber);}
+  .setup code{background:#fff;padding:1px 5px;border-radius:4px;border:1px solid #eadfc4;}
+  .note{font-size:12px;color:var(--muted);line-height:1.5;}
+  .control{background:#f0f6ff;border:2px solid var(--blue);}
+  .control .ctitle{color:var(--blue);}
+  .ctrl-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
+  .field{flex:1;min-width:120px;}
+  label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;}
+  input{width:100%;padding:10px;border:2px solid var(--border);border-radius:9px;font-size:15px;background:#fff;color:var(--border);}
+  .btns{display:flex;gap:10px;margin-top:12px;}
+  button{flex:1;padding:14px;border:2px solid var(--border);border-radius:10px;font-size:16px;font-weight:800;cursor:pointer;color:#fff;}
+  button:active{transform:translateY(1px);}
+  button.start{background:var(--green);border-color:var(--green);}
+  button.stop{background:var(--red);border-color:var(--red);}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  .ctrl-msg{font-size:13px;margin-top:10px;font-weight:700;min-height:18px;}
+  .ctrl-msg.ok{color:var(--green);} .ctrl-msg.err{color:var(--red);}
+</style>
+</head>
+<body>
+
+<h1>&#128760; Bot-Monitor</h1>
+<div class="sub">Live-Aktivit&auml;t &amp; Steuerung des Trading-Bots &middot; Paper-Trading</div>
+
+<div id="setupCard" class="card setup" style="display:none;">
+  <div class="ctitle">&#9881;&#65039; Einrichtung n&ouml;tig</div>
+  <div class="note">Trage oben im Code (Bereich <code>CONFIG</code>) deine <code>SUPABASE_URL</code> und deinen <code>SUPABASE_ANON_KEY</code> ein (Supabase &rarr; Settings &rarr; API).</div>
+</div>
+
+<div class="card">
+  <div class="statusbar">
+    <span id="botBadge" class="big-badge off">&ndash;</span>
+    <span class="meta" id="botMeta">Lade &hellip;</span>
+    <span class="live"><span id="sdot" class="sdot"></span><span id="liveTxt">verbinde &hellip;</span></span>
+  </div>
+</div>
+
+<div class="card control">
+  <div class="ctitle">&#127995;&#65039; Steuerung</div>
+  <div class="ctrl-row">
+    <div class="field">
+      <label for="ctrlSymbol">Symbol (beim Start)</label>
+      <input id="ctrlSymbol" type="text" value="AAPL" placeholder="z. B. AAPL">
+    </div>
+    <div class="field">
+      <label for="ctrlPw">Steuer-Passwort</label>
+      <input id="ctrlPw" type="password" placeholder="Passwort">
+    </div>
+  </div>
+  <div class="btns">
+    <button id="startBtn" class="start">&#9654; Bot starten</button>
+    <button id="stopBtn" class="stop">&#9209; Bot stoppen</button>
+  </div>
+  <div class="ctrl-msg" id="ctrlMsg"></div>
+</div>
+
+<div class="card">
+  <div class="stats">
+    <div class="stat"><div class="lbl">Position</div><div class="val" id="posVal">&ndash;</div></div>
+    <div class="stat"><div class="lbl">Trades gesamt</div><div class="val" id="tradeCount">&ndash;</div></div>
+    <div class="stat"><div class="lbl">Realisiert (gesch&auml;tzt)</div><div class="val" id="realized">&ndash;</div></div>
+    <div class="stat"><div class="lbl">Letzter Kurs</div><div class="val" id="lastPrice">&ndash;</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="ctitle">&#128203; Trade-Historie</div>
+  <table>
+    <thead><tr><th>Zeit</th><th>Seite</th><th>Symbol</th><th>Betrag</th><th>Kurs</th><th>Score</th></tr></thead>
+    <tbody id="tradeRows"><tr><td colspan="6" class="empty">Lade &hellip;</td></tr></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="ctitle">&#128221; Protokoll (letzte Takte)</div>
+  <div class="log" id="logBox"><div class="empty">Lade &hellip;</div></div>
+</div>
+
+<div class="card">
+  <div class="note">Aktualisiert automatisch alle 10 Sekunden. Start/Stop wirken beim n&auml;chsten 5-Minuten-Takt des Bots. Alle Werte sind virtuell (Paper-Trading).</div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ===== CONFIG - HIER EINTRAGEN ============================================
+  const SUPABASE_URL      = "https://DEIN_PROJEKT.supabase.co";   // <-- aendern
+  const SUPABASE_ANON_KEY = "DEIN_ANON_KEY";                      // <-- aendern
+  // ==========================================================================
+
+  const el=id=>document.getElementById(id);
+  const fmt=n=>(n==null||isNaN(n))?"\u2013":Number(n).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const configured=()=>!SUPABASE_URL.includes("DEIN_PROJEKT")&&!SUPABASE_ANON_KEY.includes("DEIN_ANON");
+  const base=()=>SUPABASE_URL.replace(/\/+$/,"");
+
+  async function rest(path){
+    const r=await fetch(base()+"/rest/v1/"+path,{
+      headers:{apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+SUPABASE_ANON_KEY}
+    });
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  }
+  function setLive(ok,txt){el("sdot").className="sdot "+(ok?"ok":"err");el("liveTxt").textContent=txt;}
+
+  function realizedPnL(trades){
+    const chrono=[...trades].reverse();
+    let pnl=0,lastBuy=null;
+    for(const t of chrono){
+      if(t.side==="buy") lastBuy=Number(t.notional);
+      else if(t.side==="sell"&&lastBuy!=null){ pnl+=Number(t.notional)-lastBuy; lastBuy=null; }
+    }
+    return pnl;
+  }
+
+  async function control(action){
+    const pw=el("ctrlPw").value;
+    const symbol=el("ctrlSymbol").value;
+    if(!pw){ msg("Bitte Passwort eingeben.","err"); return; }
+    setBtns(true);
+    msg("Sende Befehl ...","");
+    try{
+      const r=await fetch(base()+"/functions/v1/bot-control",{
+        method:"POST",
+        headers:{"Content-Type":"application/json",apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+SUPABASE_ANON_KEY},
+        body:JSON.stringify({password:pw,action:action,symbol:symbol})
+      });
+      const d=await r.json();
+      if(!r.ok||d.error){ msg(d.error||("Fehler "+r.status),"err"); }
+      else{ msg(action==="start"?"\u2713 Bot gestartet"+(d.symbol?" ("+d.symbol+")":""):"\u2713 Bot gestoppt","ok"); load(); }
+    }catch(e){ msg("Fehler: "+e.message,"err"); }
+    setBtns(false);
+  }
+  function msg(t,cls){const m=el("ctrlMsg");m.textContent=t;m.className="ctrl-msg "+(cls||"");}
+  function setBtns(disabled){el("startBtn").disabled=disabled;el("stopBtn").disabled=disabled;}
+
+  async function load(){
+    if(!configured()){el("setupCard").style.display="block";setLive(false,"nicht eingerichtet");return;}
+    try{
+      const results=await Promise.all([
+        rest("bot_config?id=eq.1&select=*"),
+        rest("bot_trades?select=*&order=created_at.desc&limit=50"),
+        rest("bot_log?select=*&order=created_at.desc&limit=30")
+      ]);
+      const cfg=results[0][0]||{};
+      const trades=results[1];
+      const logs=results[2];
+      const on=cfg.enabled===true;
+      const badge=el("botBadge");badge.textContent=on?"AKTIV":"PAUSIERT";badge.className="big-badge "+(on?"on":"off");
+      el("botMeta").textContent=(cfg.symbol||"?")+" \u00b7 kurz "+(cfg.ma_short!=null?cfg.ma_short:"?")+" / lang "+(cfg.ma_long!=null?cfg.ma_long:"?")+" \u00b7 Order "+fmt(cfg.order_notional)+"\u20ac \u00b7 Stop "+fmt(cfg.daily_loss_limit)+"\u20ac";
+      const lastTrade=trades[0];
+      const invested=lastTrade&&lastTrade.side==="buy";
+      el("posVal").textContent=invested?"Investiert":"Bar";el("posVal").style.color=invested?"var(--green)":"var(--border)";
+      el("tradeCount").textContent=trades.length;
+      const pnl=realizedPnL(trades);el("realized").textContent=(pnl>=0?"+":"")+fmt(pnl)+" \u20ac";el("realized").style.color=pnl>=0?"var(--green)":"var(--red)";
+      el("lastPrice").textContent=lastTrade?fmt(lastTrade.price)+" \u20ac":"\u2013";
+      const tb=el("tradeRows");
+      if(!trades.length){tb.innerHTML='<tr><td colspan="6" class="empty">Noch keine Trades.</td></tr>';}
+      else tb.innerHTML=trades.map(function(t){
+        const d=new Date(t.created_at).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+        return '<tr><td>'+d+'</td><td><span class="tag '+(t.side==="buy"?"buy":"sell")+'">'+(t.side==="buy"?"KAUF":"VERKAUF")+'</span></td><td>'+(t.symbol||"")+'</td><td>'+fmt(t.notional)+' \u20ac</td><td>'+fmt(t.price)+'</td><td>'+(t.score>0?"+":"")+(t.score!=null?t.score:"")+'</td></tr>';
+      }).join("");
+      const lb=el("logBox");
+      if(!logs.length){lb.innerHTML='<div class="empty">Noch keine Eintraege.</div>';}
+      else lb.innerHTML=logs.map(function(l){
+        const t=new Date(l.created_at).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+        return '<div class="log-entry"><span class="t">'+t+'</span> '+(l.message||"")+'</div>';
+      }).join("");
+      setLive(true,"live \u00b7 "+new Date().toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit",second:"2-digit"}));
+    }catch(e){setLive(false,"Fehler: "+e.message);}
+  }
+
+  el("startBtn").addEventListener("click",function(){control("start");});
+  el("stopBtn").addEventListener("click",function(){control("stop");});
+
+  load();
+  setInterval(load,10000);
+})();
+</script>
+</body>
+</html>

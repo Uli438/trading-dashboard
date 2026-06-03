@@ -153,7 +153,7 @@
     setBtns(true);
     msg("Sende Befehl ...","");
     try{
-      const r=await fetch(base()+"/functions/v1/bot-control",{
+      const r=await fetch(base()+"/functions/v1/bot-control-ts",{
         method:"POST",
         headers:{"Content-Type":"application/json",apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+SUPABASE_ANON_KEY},
         body:JSON.stringify({password:pw,action:action,symbol:symbol})

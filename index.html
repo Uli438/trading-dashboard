@@ -1,357 +1,292 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KI Trading Dashboard – Live</title>
-<style>
-  :root{--bg:#daeeff;--card:#ffffff;--border:#2c2c2c;--green:#1a8a3a;--red:#c62828;--blue:#1565c0;--amber:#e09b00;--muted:#5a6b7a;}
-  *{box-sizing:border-box;}
-  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--border);padding:14px;}
-  h1{font-size:21px;margin:0 0 2px;}
-  .sub{color:var(--muted);font-size:13px;margin-bottom:14px;}
-  .card{background:var(--card);border:2px solid var(--border);border-radius:14px;padding:14px;margin-bottom:14px;}
-  .ctitle{font-size:14px;font-weight:800;margin:0 0 10px;}
-  .row{display:flex;flex-wrap:wrap;gap:10px;}
-  .row>*{flex:1;min-width:120px;}
-  label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;}
-  select,input{width:100%;padding:9px;border:2px solid var(--border);border-radius:9px;font-size:15px;background:#fff;color:var(--border);}
-  .controls{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
-  button{flex:1;min-width:90px;padding:12px;border:2px solid var(--border);border-radius:10px;background:#fff;font-size:15px;font-weight:700;cursor:pointer;color:var(--border);}
-  button:active{transform:translateY(1px);}
-  button.primary{background:var(--blue);color:#fff;border-color:var(--blue);}
-  button.ghost{background:#f3f9ff;}
-  button:disabled{opacity:.4;cursor:not-allowed;}
-  .toggle{display:flex;border:2px solid var(--border);border-radius:10px;overflow:hidden;margin-top:12px;}
-  .toggle button{flex:1;border:none;border-radius:0;margin:0;background:#fff;}
-  .toggle button.active{background:var(--blue);color:#fff;}
-  .status{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-top:10px;}
-  .sdot{width:11px;height:11px;border-radius:50%;background:var(--muted);}
-  .sdot.live{background:var(--green);} .sdot.err{background:var(--red);} .sdot.wait{background:var(--amber);}
-  .stats{display:flex;gap:10px;flex-wrap:wrap;}
-  .stat{flex:1;min-width:130px;background:#f3f9ff;border:2px solid var(--border);border-radius:11px;padding:11px 13px;}
-  .stat .lbl{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;}
-  .stat .val{font-size:23px;font-weight:800;margin-top:3px;}
-  canvas{width:100%;height:260px;display:block;border-radius:8px;}
-  .legend{display:flex;gap:14px;font-size:12px;margin-top:8px;flex-wrap:wrap;}
-  .legend span{display:flex;align-items:center;gap:5px;}
-  .dot{width:12px;height:4px;border-radius:2px;display:inline-block;}
-  .pos-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:13px;font-weight:700;border:2px solid var(--border);}
-  .ind{display:flex;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid #e3edf5;font-size:14px;}
-  .ind:last-child{border-bottom:none;}
-  .ind .nm{font-weight:700;} .ind .vl{color:var(--muted);font-size:12px;margin-left:6px;}
-  .vote{font-weight:800;padding:2px 9px;border-radius:7px;font-size:12px;min-width:74px;text-align:center;}
-  .vote.buy{background:#e3f5e8;color:var(--green);} .vote.sell{background:#fdeaea;color:var(--red);} .vote.hold{background:#eef2f6;color:var(--muted);}
-  .scorebar{margin-top:10px;font-size:13px;font-weight:700;text-align:center;}
-  .ai{background:#f0f6ff;border:2px solid var(--blue);} .ai .ctitle{color:var(--blue);}
-  .ai-decision{font-size:20px;font-weight:800;margin:6px 0;}
-  .conf-wrap{height:10px;background:#dfe9f5;border-radius:6px;overflow:hidden;margin:6px 0;}
-  .conf-bar{height:100%;background:var(--blue);width:0%;}
-  .chip{display:inline-block;padding:2px 9px;border-radius:7px;font-size:12px;font-weight:700;}
-  .chip.pos{background:#e3f5e8;color:var(--green);} .chip.neg{background:#fdeaea;color:var(--red);} .chip.neu{background:#eef2f6;color:var(--muted);}
-  .reason{font-size:13px;line-height:1.5;margin-top:8px;background:#fff;border-radius:8px;padding:9px;border:1px solid #cfe0f3;}
-  .heads{font-size:12px;color:var(--muted);margin-top:8px;}
-  .log{max-height:200px;overflow-y:auto;font-size:13px;}
-  .log-entry{padding:7px 4px;border-bottom:1px solid #e3edf5;} .log-entry:last-child{border-bottom:none;}
-  .tag{font-weight:800;padding:1px 7px;border-radius:6px;font-size:12px;margin-right:5px;}
-  .tag.buy{background:#e3f5e8;color:var(--green);} .tag.sell{background:#fdeaea;color:var(--red);}
-  .tag.info{background:#e8f0fa;color:var(--blue);} .tag.risk{background:#fff3df;color:var(--amber);}
-  .note{font-size:12px;color:var(--muted);line-height:1.5;}
-  .thinking{color:var(--blue);font-weight:700;}
-  .hidden{display:none;}
-</style>
-</head>
-<body>
+// =============================================================================
+//  Supabase Edge Function: "trading-bot"
+//  Läuft auf einem Zeitplan (Cron), handelt NUR auf dem Paper-Trading-Konto.
+// =============================================================================
+//
+//  BENÖTIGTE SUPABASE SECRETS (einmalig setzen):
+//    supabase secrets set ALPACA_KEY=DEIN_PAPER_KEY
+//    supabase secrets set ALPACA_SECRET=DEIN_PAPER_SECRET
+//
+//  DEPLOYEN:
+//    supabase functions deploy trading-bot
+//
+//  ZEITPLAN EINRICHTEN (Supabase Dashboard):
+//    Edge Functions → trading-bot → Schedule → z.B. "* * * * *" (jede Minute)
+//    ODER: per SQL (siehe bot-tables.sql)
+//
+//  KILL-SWITCH:
+//    In der Tabelle bot_config den Wert  enabled = false  setzen.
+//    Nächster Takt: Bot macht nichts, schreibt "paused" ins Protokoll.
+// =============================================================================
 
-<h1>🤖 KI Trading Dashboard – Live</h1>
-<div class="sub">Echtzeit-Daten + Indikatoren-Komitee + Claude · virtuelles Geld (Paper-Trading)</div>
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-<div class="card">
-  <label for="source">Datenquelle</label>
-  <select id="source">
-    <option value="crypto">Krypto live (Coinbase, ohne Schlüssel)</option>
-    <option value="stocks">Aktien (über mein Backend)</option>
-    <option value="sim">Simulation (offline, Zeitraffer)</option>
-  </select>
+// ---- Alpaca Endpunkte (fest auf PAPER) ------------------------------------
+const TRADING_BASE = "https://paper-api.alpaca.markets";
+const DATA_BASE    = "https://data.alpaca.markets";
 
-  <div id="cryptoFields" class="row" style="margin-top:10px;">
-    <div>
-      <label for="coin">Kryptowährung</label>
-      <select id="coin">
-        <option value="BTC-EUR">Bitcoin (BTC-EUR)</option>
-        <option value="ETH-EUR">Ethereum (ETH-EUR)</option>
-        <option value="SOL-EUR">Solana (SOL-EUR)</option>
-      </select>
-    </div>
-  </div>
+// ---- Supabase-Client (Zugangsdaten automatisch injiziert) -----------------
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+);
 
-  <div id="stockFields" class="hidden" style="margin-top:10px;">
-    <div class="row">
-      <div><label for="backend">Backend-URL (Supabase Edge Function)</label><input id="backend" type="text" placeholder="https://DEINPROJEKT.supabase.co/functions/v1/stockdata"></div>
-    </div>
-    <div class="row" style="margin-top:10px;">
-      <div><label for="stockSym">Aktien-Symbol</label><input id="stockSym" type="text" value="AAPL"></div>
-    </div>
-  </div>
+// ---- Secrets ---------------------------------------------------------------
+const ALPACA_KEY    = Deno.env.get("ALPACA_KEY")!;
+const ALPACA_SECRET = Deno.env.get("ALPACA_SECRET")!;
 
-  <div id="simFields" class="hidden" style="margin-top:10px;">
-    <div><label for="symbol">Simuliertes Papier</label>
-      <select id="symbol"><option value="TECH">TECH (volatil)</option><option value="STABIL">STABIL (ruhig)</option><option value="WILD">WILD (sehr volatil)</option></select>
-    </div>
-  </div>
+// ---- Typen -----------------------------------------------------------------
+interface BotConfig {
+  enabled: boolean;
+  symbol: string;
+  ma_short: number;
+  ma_long: number;
+  order_notional: number;
+  max_position_notional: number;
+  daily_loss_limit: number;
+  capital_pool: number;        // Gesamttopf: nur dieses Kapital (+ Gewinne) wird investiert
+  stop_loss_pct: number;       // Stop-Loss in Prozent (z.B. 8 = 8%)
+}
 
-  <div class="row" style="margin-top:10px;">
-    <div><label for="capital">Startkapital (€)</label><input id="capital" type="number" value="10000" min="100" step="100"></div>
-    <div><label for="stop">Stop-Loss (%)</label><input id="stop" type="number" value="8" min="0" max="50"></div>
-  </div>
-  <div class="row" style="margin-top:10px;">
-    <div><label for="maShort">Kurzer Ø</label><input id="maShort" type="number" value="10" min="2" max="50"></div>
-    <div><label for="maLong">Langer Ø</label><input id="maLong" type="number" value="30" min="5" max="120"></div>
-    <div><label for="poll">Takt</label>
-      <select id="poll"><option value="10000">10 s (live)</option><option value="5000" selected>5 s (live)</option><option value="2000">2 s (live)</option><option value="120">Zeitraffer (Sim.)</option></select>
-    </div>
-  </div>
-
-  <div class="toggle" id="modeToggle">
-    <button data-mode="ai" class="active">Indikatoren + KI</button>
-    <button data-mode="ind">Nur Indikatoren</button>
-  </div>
-  <div class="controls">
-    <button id="startBtn" class="primary">▶ Start</button>
-    <button id="pauseBtn" disabled>⏸ Pause</button>
-    <button id="askBtn" class="ghost">🤖 KI fragen</button>
-    <button id="resetBtn">↺ Neu</button>
-  </div>
-  <div class="status"><span id="sdot" class="sdot"></span><span id="statusTxt">Bereit.</span></div>
-</div>
-
-<div class="card">
-  <div class="stats">
-    <div class="stat"><div class="lbl">Kurs</div><div class="val" id="price">–</div></div>
-    <div class="stat"><div class="lbl">Position</div><div class="val"><span id="position" class="pos-badge">Bar</span></div></div>
-    <div class="stat"><div class="lbl">Depotwert</div><div class="val" id="portfolio">–</div></div>
-    <div class="stat"><div class="lbl">Gewinn / Verlust</div><div class="val" id="pnl">–</div></div>
-  </div>
-</div>
-
-<div class="card">
-  <canvas id="chart"></canvas>
-  <div class="legend">
-    <span><span class="dot" style="background:var(--border)"></span>Kurs</span>
-    <span><span class="dot" style="background:var(--blue)"></span>Kurzer Ø</span>
-    <span><span class="dot" style="background:var(--amber)"></span>Langer Ø</span>
-    <span><span class="dot" style="background:#b8cfe8"></span>Bollinger</span>
-    <span><span class="dot" style="background:var(--green)"></span>Kauf</span>
-    <span><span class="dot" style="background:var(--red)"></span>Verkauf</span>
-  </div>
-</div>
-
-<div class="card">
-  <div class="ctitle">📊 Indikatoren-Komitee</div>
-  <div class="ind"><span><span class="nm">Gleitende Ø</span><span class="vl" id="maVal"></span></span><span class="vote hold" id="maVote">–</span></div>
-  <div class="ind"><span><span class="nm">RSI (14)</span><span class="vl" id="rsiVal"></span></span><span class="vote hold" id="rsiVote">–</span></div>
-  <div class="ind"><span><span class="nm">MACD</span><span class="vl" id="macdVal"></span></span><span class="vote hold" id="macdVote">–</span></div>
-  <div class="ind"><span><span class="nm">Bollinger-Bänder</span><span class="vl" id="bbVal"></span></span><span class="vote hold" id="bbVote">–</span></div>
-  <div class="scorebar" id="score">Komitee-Punktzahl: 0</div>
-</div>
-
-<div class="card ai">
-  <div class="ctitle">🤖 Claude – Stimmung & Schiedsspruch</div>
-  <div id="aiBody"><div class="note">Noch keine KI-Bewertung.</div></div>
-</div>
-
-<div class="card">
-  <div class="ctitle">📋 Handels-Protokoll</div>
-  <div class="log" id="log"></div>
-</div>
-
-<div class="card">
-  <div class="note">
-    <strong>Krypto</strong> läuft sofort (öffentliche Coinbase-Daten, kein Schlüssel). <strong>Aktien</strong> brauchen die mitgelieferte Supabase Edge Function – die hält den API-Schlüssel sicher auf dem Server. Gehandelt wird immer nur mit <strong>virtuellem Geld</strong>; echte Orders wären der letzte Schritt und brauchen Broker-Schlüssel im selben Backend.
-    <br><br>
-    <strong>Falls „Quelle nicht erreichbar" erscheint:</strong> In dieser Vorschau sind externe Abrufe evtl. gesperrt. Lade die Datei herunter und öffne sie lokal oder auf GitHub Pages – dann lädt der Live-Feed.
-  </div>
-</div>
-
-<script>
-(function(){
-  "use strict";
-  const el=id=>document.getElementById(id);
-  const fmt=n=>(n==null||isNaN(n))?"–":n.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2});
-
-  // ---- Indikatoren ----
-  function emaArr(s,len){const k=2/(len+1);const o=[];let p;for(let i=0;i<s.length;i++){p=i===0?s[i]:s[i]*k+p*(1-k);o.push(p);}return o;}
-  function rsiArr(s,len){const o=new Array(s.length).fill(null);let g=0,l=0;for(let i=1;i<s.length;i++){const c=s[i]-s[i-1],gg=Math.max(0,c),ll=Math.max(0,-c);if(i<=len){g+=gg;l+=ll;if(i===len){g/=len;l/=len;o[i]=l===0?100:100-100/(1+g/l);}}else{g=(g*(len-1)+gg)/len;l=(l*(len-1)+ll)/len;o[i]=l===0?100:100-100/(1+g/l);}}return o;}
-  function smaArr(s,len){const o=[];for(let i=0;i<s.length;i++){if(i+1<len){o.push(null);continue;}let x=0;for(let k=i-len+1;k<=i;k++)x+=s[k];o.push(x/len);}return o;}
-  function bollinger(s,len,m){const mid=[],up=[],lo=[];for(let i=0;i<s.length;i++){if(i+1<len){mid.push(null);up.push(null);lo.push(null);continue;}let x=0;for(let k=i-len+1;k<=i;k++)x+=s[k];const me=x/len;let v=0;for(let k=i-len+1;k<=i;k++)v+=(s[k]-me)**2;const sd=Math.sqrt(v/len);mid.push(me);up.push(me+m*sd);lo.push(me-m*sd);}return{mid,up,lo};}
-  function buildIndicators(prices,maS,maL){const e12=emaArr(prices,12),e26=emaArr(prices,26);const macd=prices.map((_,i)=>e12[i]-e26[i]);return{maShort:smaArr(prices,maS),maLong:smaArr(prices,maL),rsi:rsiArr(prices,14),macd,signal:emaArr(macd,9),bb:bollinger(prices,20,2)};}
-
-  // ---- State ----
-  let S=null, running=false, mode="ai", busy=false, timer=null;
-
-  function readConf(){return{
-    source:el("source").value,
-    maS:Math.max(2,parseInt(el("maShort").value)||10),
-    maL:Math.max(5,parseInt(el("maLong").value)||30),
-    capital:parseFloat(el("capital").value)||10000,
-    stop:Math.max(0,parseFloat(el("stop").value)||0),
-    poll:parseInt(el("poll").value)||5000
-  };}
-
-  function newState(prices,times,label){
-    const c=readConf();
-    return{prices,times:times||prices.map((_,i)=>i),label,i:prices.length-1,
-      ind:buildIndicators(prices,c.maS,c.maL),maS:c.maS,maL:c.maL,
-      cash:c.capital,startCapital:c.capital,shares:0,entry:0,stop:c.stop,
-      markers:[],lastSignal:null};
+// ---- Alpaca HTTP-Helfer ----------------------------------------------------
+async function alpaca(
+  base: string, method: string, path: string, body?: unknown
+): Promise<unknown> {
+  const res = await fetch(base + path, {
+    method,
+    headers: {
+      "APCA-API-KEY-ID": ALPACA_KEY,
+      "APCA-API-SECRET-KEY": ALPACA_SECRET,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const txt = await res.text();
+  let data: unknown;
+  try { data = txt ? JSON.parse(txt) : {}; } catch { data = { raw: txt }; }
+  if (!res.ok) {
+    const msg = (data as Record<string, string>).message || txt;
+    throw new Error(`Alpaca ${res.status}: ${msg}`);
   }
-  function refreshData(prices,times){
-    S.prices=prices;S.times=times||prices.map((_,i)=>i);
-    S.ind=buildIndicators(prices,S.maS,S.maL);S.i=prices.length-1;
+  return data;
+}
+
+// ---- Indikatoren -----------------------------------------------------------
+function sma(s: number[], end: number, len: number): number | null {
+  if (end + 1 < len) return null;
+  let x = 0;
+  for (let k = end - len + 1; k <= end; k++) x += s[k];
+  return x / len;
+}
+function emaArr(s: number[], len: number): number[] {
+  const k = 2 / (len + 1);
+  const o: number[] = [];
+  let p = 0;
+  for (let i = 0; i < s.length; i++) {
+    p = i === 0 ? s[i] : s[i] * k + p * (1 - k);
+    o.push(p);
+  }
+  return o;
+}
+function rsiVal(s: number[], end: number, len: number): number | null {
+  if (end < len) return null;
+  let g = 0, l = 0;
+  for (let i = end - len + 1; i <= end; i++) {
+    const c = s[i] - s[i - 1];
+    g += Math.max(0, c);
+    l += Math.max(0, -c);
+  }
+  g /= len; l /= len;
+  return l === 0 ? 100 : 100 - 100 / (1 + g / l);
+}
+function bollinger(s: number[], end: number, len: number, m: number) {
+  if (end + 1 < len) return null;
+  let x = 0;
+  for (let k = end - len + 1; k <= end; k++) x += s[k];
+  const me = x / len;
+  let v = 0;
+  for (let k = end - len + 1; k <= end; k++) v += (s[k] - me) ** 2;
+  const sd = Math.sqrt(v / len);
+  return { up: me + m * sd, lo: me - m * sd };
+}
+
+function committee(prices: number[], maS: number, maL: number) {
+  const i = prices.length - 1;
+  const price = prices[i];
+  const e12 = emaArr(prices, 12), e26 = emaArr(prices, 26);
+  const macdArr = prices.map((_, k) => e12[k] - e26[k]);
+  const signalArr = emaArr(macdArr, 9);
+  const bb = bollinger(prices, i, 20, 2);
+  const r = rsiVal(prices, i, 14);
+  const maShortVal = sma(prices, i, maS);
+  const maLongVal  = sma(prices, i, maL);
+
+  const vMa   = (maShortVal != null && maLongVal != null)
+                  ? (maShortVal > maLongVal ? 1 : -1) : 0;
+  const vRsi  = r == null ? 0 : (r < 30 ? 1 : (r > 70 ? -1 : 0));
+  const vMacd = macdArr[i] > signalArr[i] ? 1 : (macdArr[i] < signalArr[i] ? -1 : 0);
+  const vBb   = bb ? (price < bb.lo ? 1 : (price > bb.up ? -1 : 0)) : 0;
+  const score = vMa + vRsi + vMacd + vBb;
+  return { price, score, votes: { ma: vMa, rsi: vRsi, macd: vMacd, bb: vBb, rsiVal: r } };
+}
+
+// ---- Protokollierung in Supabase -------------------------------------------
+async function logTrade(data: Record<string, unknown>) {
+  await supabase.from("bot_trades").insert(data);
+}
+async function logStatus(msg: string) {
+  await supabase.from("bot_log").insert({ message: msg });
+}
+
+// ---- Markt offen? ----------------------------------------------------------
+async function marketIsOpen(): Promise<boolean> {
+  const clock = await alpaca(TRADING_BASE, "GET", "/v2/clock") as Record<string, unknown>;
+  return clock.is_open === true;
+}
+
+// ---- Hauptlogik ------------------------------------------------------------
+async function runBotTick(): Promise<Record<string, unknown>> {
+
+  // 1) Konfiguration aus Datenbank lesen
+  const { data: cfgRow, error: cfgErr } = await supabase
+    .from("bot_config").select("*").eq("id", 1).single();
+  if (cfgErr || !cfgRow) throw new Error("bot_config nicht gefunden: " + cfgErr?.message);
+  const cfg = cfgRow as BotConfig;
+
+  // 2) Kill-Switch prüfen
+  if (!cfg.enabled) {
+    return { status: "paused", reason: "Bot in bot_config deaktiviert." };
   }
 
-  // ---- Datenquellen ----
-  async function fetchCrypto(product){
-    const r=await fetch("https://api.exchange.coinbase.com/products/"+product+"/candles?granularity=60");
-    if(!r.ok) throw new Error("HTTP "+r.status);
-    const raw=await r.json();             // [[time,low,high,open,close,vol],...]
-    raw.sort((a,b)=>a[0]-b[0]);
-    return{prices:raw.map(c=>c[4]),times:raw.map(c=>c[0])};
-  }
-  async function fetchStocks(backend,symbol){
-    if(!backend) throw new Error("Backend-URL fehlt");
-    const u=backend.replace(/\/+$/,"")+"?symbol="+encodeURIComponent(symbol);
-    const r=await fetch(u);
-    if(!r.ok) throw new Error("Backend HTTP "+r.status);
-    const d=await r.json();
-    if(d.error) throw new Error(d.error);
-    return{prices:d.prices,times:d.times||d.prices.map((_,i)=>i)};
-  }
-  // Simulation
-  const profiles={TECH:{start:150,drift:0.0004,vol:0.018},STABIL:{start:80,drift:0.0002,vol:0.007},WILD:{start:40,drift:0.0003,vol:0.035}};
-  function genSim(symbol){const p=profiles[symbol],N=260,pr=[p.start];for(let i=1;i<N;i++){const sh=Math.random()*2-1;pr.push(Math.max(1,pr[i-1]*(1+p.drift+p.vol*sh)));}return pr;}
-
-  // ---- Komitee ----
-  function votes(i){const I=S.ind,price=S.prices[i],r={};
-    r.ma=(I.maShort[i]!=null&&I.maLong[i]!=null)?(I.maShort[i]>I.maLong[i]?1:-1):0;
-    const rsi=I.rsi[i];r.rsi=rsi==null?0:(rsi<30?1:(rsi>70?-1:0));
-    r.macd=I.macd[i]>I.signal[i]?1:(I.macd[i]<I.signal[i]?-1:0);
-    r.bb=(I.bb.lo[i]!=null)?(price<I.bb.lo[i]?1:(price>I.bb.up[i]?-1:0)):0;
-    r.score=r.ma+r.rsi+r.macd+r.bb;return r;}
-  function voteEl(id,v){const e=el(id);e.textContent=v>0?"KAUFEN":v<0?"VERKAUFEN":"HALTEN";e.className="vote "+(v>0?"buy":v<0?"sell":"hold");}
-
-  // ---- Handel ----
-  function addLog(t,x){const cls=t==="Kauf"?"buy":t==="Verkauf"?"sell":t==="Risiko"?"risk":"info";const e=document.createElement("div");e.className="log-entry";e.innerHTML='<span class="tag '+cls+'">'+t+'</span>'+x;el("log").insertBefore(e,el("log").firstChild);}
-  function buy(price,reason){const q=Math.floor(S.cash/price);if(q<=0)return;S.shares+=q;S.cash-=q*price;S.entry=price;S.markers.push({t:S.times[S.i],price,type:"buy"});addLog("Kauf",q+" @ "+fmt(price)+" "+(reason||""));}
-  function sell(price,reason){if(S.shares<=0)return;const q=S.shares;S.cash+=q*price;S.shares=0;S.markers.push({t:S.times[S.i],price,type:"sell"});addLog("Verkauf",q+" @ "+fmt(price)+" "+(reason||""));}
-  function checkStopLoss(){if(S.shares>0&&S.stop>0){const price=S.prices[S.i];if(price<=S.entry*(1-S.stop/100)){sell(price,"· STOP-LOSS");addLog("Risiko","Stop-Loss bei −"+S.stop+"% griff vor der KI.");return true;}}return false;}
-
-  // ---- KI ----
-  const HEADLINES={pos:["Quartalszahlen übertreffen die Erwartungen","Großauftrag sorgt für Optimismus","Analysten heben das Kursziel an"],neg:["Gewinnwarnung verunsichert Anleger","Lieferkettenprobleme belasten den Ausblick","Regulierungsbehörde leitet Prüfung ein"],neu:["Prognose bestätigt, keine Überraschungen","Markt wartet auf neue Konjunkturdaten","Seitwärtstrend in der Branche"]};
-  function pickHeadlines(score){const w=score>=2?["pos","pos","neu","neg"]:score<=-2?["neg","neg","neu","pos"]:["neu","pos","neg"];const used=new Set(),bag=[];while(bag.length<3){const t=w[Math.floor(Math.random()*w.length)],pool=HEADLINES[t],h=pool[Math.floor(Math.random()*pool.length)];if(!used.has(h)){used.add(h);bag.push(h);}}return bag;}
-
-  async function askAI(v,heads){
-    const price=S.prices[S.i],rsi=S.ind.rsi[S.i];
-    const maTxt=v.ma>0?"Aufwärtstrend":v.ma<0?"Abwärtstrend":"neutral";
-    const macdTxt=v.macd>0?"bullisch":v.macd<0?"bärisch":"neutral";
-    const bbTxt=v.bb>0?"überverkauft":v.bb<0?"überkauft":"normal";
-    const prompt="Du bist ein vorsichtiger Handels-Analyst. Bewerte die Lage und gib EINE Empfehlung.\n\nINDIKATOREN:\n- Gleitende Durchschnitte: "+maTxt+"\n- RSI(14): "+(rsi==null?"n/a":rsi.toFixed(0))+"\n- MACD: "+macdTxt+"\n- Bollinger: "+bbTxt+"\n- Komitee-Punktzahl: "+v.score+" (-4 bis +4)\n\nSIMULIERTE SCHLAGZEILEN:\n"+heads.map(h=>"- "+h).join("\n")+"\n\nLAGE:\n- Position: "+(S.shares>0?"investiert (Einstieg "+fmt(S.entry)+")":"bar")+"\n- Kurs: "+fmt(price)+"\n\nGewichte Indikatoren UND Stimmung. Im Zweifel halten.\nAntworte AUSSCHLIESSLICH mit reinem JSON ohne Backticks:\n{\"entscheidung\":\"kaufen\"|\"verkaufen\"|\"halten\",\"zuversicht\":0-100,\"stimmung\":\"positiv\"|\"neutral\"|\"negativ\",\"begruendung\":\"max 2 Sätze deutsch\"}";
-    try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:400,messages:[{role:"user",content:prompt}]})});
-      const data=await res.json();
-      let txt=(data.content||[]).map(b=>b.text||"").join("").replace(/```json|```/g,"").trim();
-      return JSON.parse(txt);
-    }catch(e){return{entscheidung:"halten",zuversicht:0,stimmung:"neutral",begruendung:"KI nicht erreichbar – vorsichtshalber halten."};}
-  }
-  function renderAI(d,heads){const sc=d.stimmung==="positiv"?"pos":d.stimmung==="negativ"?"neg":"neu";const col=d.entscheidung==="kaufen"?"var(--green)":d.entscheidung==="verkaufen"?"var(--red)":"var(--muted)";
-    el("aiBody").innerHTML='<div class="ai-decision" style="color:'+col+'">Empfehlung: '+d.entscheidung.toUpperCase()+'</div><div style="font-size:12px;color:var(--muted)">Zuversicht '+d.zuversicht+'% · Stimmung <span class="chip '+sc+'">'+d.stimmung+'</span></div><div class="conf-wrap"><div class="conf-bar" style="width:'+d.zuversicht+'%"></div></div><div class="reason">'+d.begruendung+'</div>'+(heads?'<div class="heads">Bewertete Schlagzeilen (simuliert):<ul>'+heads.map(h=>"<li>"+h+"</li>").join("")+'</ul></div>':'');}
-  async function consult(v,auto){busy=true;el("aiBody").innerHTML='<div class="thinking">🤖 Claude denkt nach …</div>';const heads=pickHeadlines(v.score);const d=await askAI(v,heads);renderAI(d,heads);const price=S.prices[S.i];if(d.entscheidung==="kaufen"&&S.shares===0)buy(price,"· KI");else if(d.entscheidung==="verkaufen"&&S.shares>0)sell(price,"· KI");else if(auto)addLog("Info","KI empfiehlt halten.");busy=false;render();}
-
-  // ---- Signale auswerten ----
-  async function evaluate(){
-    const v=votes(S.i);render(v);
-    if(checkStopLoss())return;
-    const buySig=v.score>=2&&S.shares===0, sellSig=v.score<=-2&&S.shares>0;
-    const key=buySig?"buy":sellSig?"sell":null;
-    if(key&&key!==S.lastSignal){S.lastSignal=key;
-      if(mode==="ai")await consult(v,true);
-      else{const price=S.prices[S.i];if(buySig)buy(price,"· Komitee "+v.score);else sell(price,"· Komitee "+v.score);}
-    }else if(!key)S.lastSignal=null;
+  // 3) Kursdaten holen (Alpaca Data API, kostenloser IEX-Feed)
+  const barPath =
+    `/v2/stocks/${encodeURIComponent(cfg.symbol)}/bars` +
+    `?timeframe=1Day&limit=120&feed=iex&adjustment=raw`;
+  const barData = await alpaca(DATA_BASE, "GET", barPath) as Record<string, unknown>;
+  const bars = (barData.bars || []) as Record<string, number>[];
+  const prices = bars.map((b) => b.c).filter((n) => typeof n === "number");
+  if (prices.length < cfg.ma_long + 5) {
+    return { status: "warte", reason: `Nur ${prices.length} Bars vorhanden.` };
   }
 
-  function setStatus(kind,txt){el("sdot").className="sdot "+(kind||"");el("statusTxt").textContent=txt;}
+  // 4) Indikatoren berechnen
+  const c = committee(prices, cfg.ma_short, cfg.ma_long);
 
-  // ---- Live-Schleife ----
-  async function liveLoop(){
-    if(!running)return;
-    const c=readConf();
-    try{
-      setStatus("wait","Lade Daten …");
-      let d;
-      if(c.source==="crypto")d=await fetchCrypto(el("coin").value);
-      else d=await fetchStocks(el("backend").value.trim(),el("stockSym").value.trim());
-      if(!d.prices||d.prices.length<30)throw new Error("zu wenige Datenpunkte");
-      if(!S)S=newState(d.prices,d.times,c.source==="crypto"?el("coin").value:el("stockSym").value);
-      else refreshData(d.prices,d.times);
-      setStatus("live","Live verbunden · "+(S.label||""));
-      await evaluate();
-    }catch(e){setStatus("err","Quelle nicht erreichbar: "+e.message);}
-    if(running)timer=setTimeout(liveLoop,c.poll);
-  }
-  // ---- Simulationsschleife (Zeitraffer) ----
-  function simStep(){
-    if(!running)return;
-    if(S.i>=S.prices.length-1){running=false;el("startBtn").disabled=false;el("pauseBtn").disabled=true;setStatus("","Simulation beendet.");return;}
-    S.i++;evaluate().then(()=>{if(running)timer=setTimeout(simStep,readConf().poll);});
+  // 5) Alpaca-Konto prüfen (Schutzschranken)
+  const account = await alpaca(TRADING_BASE, "GET", "/v2/account") as Record<string, string>;
+  const equity     = parseFloat(account.equity);
+  const lastEquity = parseFloat(account.last_equity);
+  const dailyPnL   = equity - lastEquity;
+
+  if (dailyPnL <= -Math.abs(cfg.daily_loss_limit)) {
+    await logStatus(`Tagesverlustlimit erreicht (${dailyPnL.toFixed(2)}€) – kein Handel.`);
+    return { status: "limit", dailyPnL };
   }
 
-  function startLoop(){
-    if(busy)return;running=true;el("startBtn").disabled=true;el("pauseBtn").disabled=false;
-    if(readConf().source==="sim"){if(!S){S=newState(genSim(el("symbol").value),null,el("symbol").value);S.i=0;}setStatus("live","Simulation läuft …");simStep();}
-    else liveLoop();
+  // 6) Aktuelle Position prüfen
+  let position: Record<string, string> | null = null;
+  try {
+    position = await alpaca(
+      TRADING_BASE, "GET", `/v2/positions/${encodeURIComponent(cfg.symbol)}`
+    ) as Record<string, string>;
+  } catch { /* keine Position vorhanden */ }
+
+  const invested  = !!position;
+  const posValue  = invested ? parseFloat(position!.market_value) : 0;
+  const buySig    = c.score >= 2 && !invested;
+  const sellSig   = c.score <= -2 && invested;
+
+  await logStatus(
+    `${cfg.symbol} | Kurs ${c.price.toFixed(2)} | Score ${c.score > 0 ? "+" : ""}${c.score}` +
+    ` | Position ${invested ? posValue.toFixed(0) + "€" : "keine"} | Tag-PnL ${dailyPnL.toFixed(2)}€`
+  );
+
+  // 7) Markt offen? (bei Aktien nötig)
+  if (buySig || sellSig) {
+    const open = await marketIsOpen();
+    if (!open) {
+      return { status: "market_closed", score: c.score, signal: buySig ? "buy" : "sell" };
+    }
   }
-  function stopLoop(){running=false;clearTimeout(timer);el("startBtn").disabled=false;el("pauseBtn").disabled=true;setStatus("","Pausiert.");}
-  function reset(){stopLoop();S=null;el("log").innerHTML="";el("aiBody").innerHTML='<div class="note">Noch keine KI-Bewertung.</div>';["price","portfolio","pnl"].forEach(i=>el(i).textContent="–");setStatus("","Bereit.");}
 
-  // ---- Rendern ----
-  function render(v){if(!S)return;v=v||votes(S.i);const price=S.prices[S.i];const port=S.cash+S.shares*price,pnl=port-S.startCapital,pct=pnl/S.startCapital*100;
-    el("price").textContent=fmt(price);const pb=el("position");
-    if(S.shares>0){pb.textContent="Investiert ("+S.shares+")";pb.style.background="#e3f5e8";pb.style.color="var(--green)";}else{pb.textContent="Bar";pb.style.background="#fff";pb.style.color="var(--border)";}
-    el("portfolio").textContent=fmt(port);const pe=el("pnl");pe.textContent=(pnl>=0?"+":"")+fmt(pnl)+" ("+(pnl>=0?"+":"")+pct.toFixed(1)+"%)";pe.style.color=pnl>=0?"var(--green)":"var(--red)";
-    const I=S.ind,i=S.i;
-    el("maVal").textContent=I.maShort[i]!=null?"k "+fmt(I.maShort[i])+" / l "+fmt(I.maLong[i]):"sammelt Daten";
-    el("rsiVal").textContent=I.rsi[i]!=null?I.rsi[i].toFixed(0):"–";
-    el("macdVal").textContent=fmt(I.macd[i])+" / "+fmt(I.signal[i]);
-    el("bbVal").textContent=I.bb.up[i]!=null?fmt(I.bb.lo[i])+" – "+fmt(I.bb.up[i]):"sammelt Daten";
-    voteEl("maVote",v.ma);voteEl("rsiVote",v.rsi);voteEl("macdVote",v.macd);voteEl("bbVote",v.bb);
-    const sb=el("score");sb.textContent="Komitee-Punktzahl: "+(v.score>0?"+":"")+v.score+(v.score>=2?"  → Kaufzone":v.score<=-2?"  → Verkaufzone":"  → neutral");
-    sb.style.color=v.score>=2?"var(--green)":v.score<=-2?"var(--red)":"var(--muted)";
-    drawChart();
+  // 8) Kaufen
+  if (buySig) {
+    // --- Kapitaltopf-Prüfung: nie mehr als capital_pool im Markt ---
+    // Verfügbarer Spielraum = Topf minus bereits investierter Positionswert
+    const freiImTopf = cfg.capital_pool - posValue;
+    if (freiImTopf <= 1) {
+      await logStatus(
+        `Kauf übersprungen: Topf ausgeschöpft ` +
+        `(Topf ${cfg.capital_pool.toFixed(0)}€, investiert ${posValue.toFixed(0)}€).`
+      );
+      return { status: "pool_voll", capital_pool: cfg.capital_pool, invested: posValue };
+    }
+    // Kaufbetrag = kleinerer Wert aus gewünschtem Notional und freiem Topf
+    const kaufBetrag = Math.min(cfg.order_notional, freiImTopf);
+
+    // zusätzliche Einzelpositions-Obergrenze (bestehende Schranke)
+    if (posValue + kaufBetrag > cfg.max_position_notional) {
+      return { status: "limit", reason: "Max. Positionsgröße würde überschritten." };
+    }
+
+    const order = await alpaca(TRADING_BASE, "POST", "/v2/orders", {
+      symbol: cfg.symbol, notional: Math.floor(kaufBetrag * 100) / 100,
+      side: "buy", type: "market", time_in_force: "day",
+    }) as Record<string, string>;
+    await logTrade({
+      symbol: cfg.symbol, side: "buy",
+      notional: kaufBetrag, price: c.price,
+      score: c.score, order_id: order.id, mode: "paper",
+    });
+    await logStatus(
+      `KAUF ${cfg.symbol}: ${kaufBetrag.toFixed(0)}€ (Topf ${cfg.capital_pool.toFixed(0)}€).`
+    );
+    return { status: "buy", orderId: order.id, betrag: kaufBetrag, price: c.price, score: c.score };
   }
-  function nearest(times,t,a,b){let bi=a,bd=Infinity;for(let k=a;k<=b;k++){const dd=Math.abs(times[k]-t);if(dd<bd){bd=dd;bi=k;}}return bi;}
-  function drawChart(){const cv=el("chart"),dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;cv.width=w*dpr;cv.height=h*dpr;const ctx=cv.getContext("2d");ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
-    const upto=S.i,view=Math.max(0,upto-119);if(upto-view<1)return;const I=S.ind;let mn=Infinity,mx=-Infinity;
-    for(let k=view;k<=upto;k++){mn=Math.min(mn,S.prices[k]);mx=Math.max(mx,S.prices[k]);if(I.bb.lo[k]!=null){mn=Math.min(mn,I.bb.lo[k]);mx=Math.max(mx,I.bb.up[k]);}}
-    const pad=(mx-mn)*0.08||1;mn-=pad;mx+=pad;const xOf=k=>((k-view)/(upto-view))*(w-10)+5,yOf=val=>h-10-((val-mn)/(mx-mn))*(h-20);
-    function line(get,col,lw){ctx.beginPath();ctx.lineWidth=lw;ctx.strokeStyle=col;let st=false;for(let k=view;k<=upto;k++){const val=get(k);if(val==null){st=false;continue;}const x=xOf(k),y=yOf(val);if(!st){ctx.moveTo(x,y);st=true;}else ctx.lineTo(x,y);}ctx.stroke();}
-    line(k=>I.bb.up[k],"#b8cfe8",1);line(k=>I.bb.lo[k],"#b8cfe8",1);line(k=>S.prices[k],"#2c2c2c",2);line(k=>I.maShort[k],"#1565c0",1.5);line(k=>I.maLong[k],"#e09b00",1.5);
-    S.markers.forEach(m=>{const idx=nearest(S.times,m.t,view,upto);if(idx<view)return;ctx.beginPath();ctx.arc(xOf(idx),yOf(m.price),5,0,Math.PI*2);ctx.fillStyle=m.type==="buy"?"#1a8a3a":"#c62828";ctx.fill();ctx.lineWidth=2;ctx.strokeStyle="#fff";ctx.stroke();});}
 
-  // ---- UI ----
-  function syncFields(){const s=el("source").value;el("cryptoFields").classList.toggle("hidden",s!=="crypto");el("stockFields").classList.toggle("hidden",s!=="stocks");el("simFields").classList.toggle("hidden",s!=="sim");}
-  el("source").addEventListener("change",()=>{syncFields();reset();});
-  el("coin").addEventListener("change",reset);
-  el("symbol").addEventListener("change",reset);
-  el("startBtn").addEventListener("click",startLoop);
-  el("pauseBtn").addEventListener("click",stopLoop);
-  el("resetBtn").addEventListener("click",reset);
-  el("askBtn").addEventListener("click",async()=>{if(!S||busy)return;const wr=running;running=false;clearTimeout(timer);await consult(votes(S.i),false);if(wr){running=true;readConf().source==="sim"?simStep():liveLoop();}});
-  document.querySelectorAll("#modeToggle button").forEach(b=>b.addEventListener("click",()=>{mode=b.dataset.mode;document.querySelectorAll("#modeToggle button").forEach(x=>x.classList.remove("active"));b.classList.add("active");}));
-  window.addEventListener("resize",()=>{if(S)drawChart();});
+  // 9) Verkaufen
+  if (sellSig) {
+    // Einstandswert der Position (was wurde investiert) vs. aktueller Marktwert
+    const einstand = parseFloat(position!.cost_basis || "0");
+    const erloes    = posValue;                 // aktueller Marktwert = Verkaufserlös
+    const gewinn    = erloes - einstand;        // realisierter Gewinn/Verlust
 
-  syncFields();
-  setStatus("","Bereit. Quelle wählen und ▶ Start drücken.");
-})();
-</script>
-</body>
-</html>
+    await alpaca(TRADING_BASE, "DELETE", `/v2/positions/${encodeURIComponent(cfg.symbol)}`);
+
+    // --- Topf anpassen: Gewinn vergrößert ihn, Verlust verkleinert ihn ---
+    const neuerPool = Math.max(0, cfg.capital_pool + gewinn);
+    await supabase.from("bot_config").update({ capital_pool: neuerPool }).eq("id", 1);
+
+    await logTrade({
+      symbol: cfg.symbol, side: "sell",
+      notional: erloes, price: c.price,
+      score: c.score, order_id: null, mode: "paper",
+    });
+    await logStatus(
+      `VERKAUF ${cfg.symbol}: Erlös ${erloes.toFixed(0)}€, ` +
+      `G/V ${gewinn >= 0 ? "+" : ""}${gewinn.toFixed(0)}€ → Topf neu ${neuerPool.toFixed(0)}€.`
+    );
+    return { status: "sell", price: c.price, gewinn, capital_pool: neuerPool };
+  }
+
+  return { status: "hold", score: c.score, invested };
+}
+
+// ---- HTTP-Einstiegspunkt (von Supabase-Scheduler aufgerufen) ---------------
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*" } });
+  }
+  try {
+    const result = await runBotTick();
+    return new Response(JSON.stringify(result), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+});

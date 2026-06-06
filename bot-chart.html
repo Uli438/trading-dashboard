@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bot-Chart</title>
+<style>
+  :root{
+    --bg:#0e1726; --card:#14233b; --line:#2a3d5c;
+    --txt:#e8eef7; --muted:#8aa0bf; --buy:#16c784; --sell:#ea3943;
+    --accent:#3b82f6; --grid:#1d2c45;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       background:var(--bg);color:var(--txt);padding:14px;}
+  h1{font-size:20px;margin:0 0 2px;}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:14px;}
+  .card{background:var(--card);border:1px solid var(--grid);border-radius:14px;
+        padding:14px;margin-bottom:14px;}
+  .note{background:#3a2e12;border:1px solid #6b5212;border-radius:12px;padding:12px;
+        color:#f4d489;font-size:14px;margin-bottom:14px;}
+  code{background:#0d1424;padding:1px 6px;border-radius:5px;font-size:12px;}
+  .tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;}
+  .tab{background:#0d1424;border:1px solid var(--grid);color:var(--muted);
+       border-radius:999px;padding:8px 16px;font-size:14px;font-weight:600;cursor:pointer;}
+  .tab.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+  canvas{width:100%;height:auto;display:block;border-radius:10px;}
+  .legend{display:flex;gap:18px;align-items:center;font-size:13px;color:var(--muted);
+          margin-top:10px;flex-wrap:wrap;}
+  .dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;
+       vertical-align:middle;}
+  .stat-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;}
+  .stat{flex:1;min-width:120px;background:#0d1424;border:1px solid var(--grid);
+        border-radius:10px;padding:10px 12px;}
+  .stat .k{font-size:12px;color:var(--muted);}
+  .stat .v{font-size:18px;font-weight:700;margin-top:2px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px;}
+  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--grid);}
+  th{color:var(--muted);font-weight:600;}
+  .buy{color:var(--buy);font-weight:700;}
+  .sell{color:var(--sell);font-weight:700;}
+  .status{font-size:13px;color:var(--muted);}
+  .err{color:var(--sell);}
+</style>
+</head>
+<body>
+  <h1>📈 Bot-Chart</h1>
+  <div class="sub">Kauf- und Verkaufspunkte je Wert &middot; Paper-Trading</div>
+
+  <div id="setup" class="note" style="display:none">
+    Trage unten im Code (Bereich <code>CONFIG</code>) deinen <code>SUPABASE_ANON_KEY</code> ein
+    (Supabase &rarr; Settings &rarr; API). Die Projekt-URL ist bereits eingetragen.
+  </div>
+
+  <div class="card">
+    <div id="tabs" class="tabs"></div>
+    <canvas id="chart" width="700" height="380"></canvas>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--accent)"></span>Kursverlauf (an Trade-Zeitpunkten)</span>
+      <span><span class="dot" style="background:var(--buy)"></span>Kauf</span>
+      <span><span class="dot" style="background:var(--sell)"></span>Verkauf</span>
+    </div>
+    <div class="stat-row" id="stats"></div>
+  </div>
+
+  <div class="card">
+    <h1 style="font-size:16px">📋 Trades</h1>
+    <table>
+      <thead><tr><th>Zeit</th><th>Seite</th><th>Symbol</th><th>Betrag</th><th>Kurs</th></tr></thead>
+      <tbody id="tbody"><tr><td colspan="5" class="status">Lade …</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card status" id="foot">Aktualisiert automatisch alle 30 Sekunden.</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ===== CONFIG - HIER EINTRAGEN ==========================================
+  const SUPABASE_URL      = "https://pukixlbdbdbbsmqobfhj.supabase.co"; // bereits gesetzt
+  const SUPABASE_ANON_KEY = "DEIN_ANON_KEY";                            // <-- aendern
+  // ========================================================================
+
+  const el  = (id)=>document.getElementById(id);
+  const cfgOk = ()=> !SUPABASE_ANON_KEY.includes("DEIN_ANON");
+  const base  = ()=> SUPABASE_URL.replace(/\/+$/,"");
+
+  if(!cfgOk()){ el("setup").style.display="block"; }
+
+  async function rest(path){
+    const r = await fetch(base()+"/rest/v1/"+path,{
+      headers:{apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+SUPABASE_ANON_KEY}
+    });
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  }
+
+  let trades = [];
+  let symbols = [];
+  let aktiv = null;
+
+  const fmtMoney = (n)=> (n==null||isNaN(n))?"–":Number(n).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})+" €";
+  const fmtNum   = (n)=> (n==null||isNaN(n))?"–":Number(n).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmtTime  = (t)=>{const d=new Date(t);return d.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})+" "+d.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"});};
+
+  function drawChart(){
+    const cv = el("chart"); const ctx = cv.getContext("2d");
+    // hohe Auflösung
+    const W = cv.width, H = cv.height;
+    ctx.clearRect(0,0,W,H);
+    const data = trades.filter(t=>t.symbol===aktiv).slice().sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+    if(data.length===0){
+      ctx.fillStyle="#8aa0bf";ctx.font="16px sans-serif";ctx.textAlign="center";
+      ctx.fillText("Noch keine Trades für "+aktiv,W/2,H/2);
+      return;
+    }
+    const padL=64,padR=20,padT=20,padB=40;
+    const prices = data.map(d=>Number(d.price));
+    let min=Math.min(...prices), max=Math.max(...prices);
+    if(min===max){min=min*0.99;max=max*1.01;}
+    const rng=max-min;
+    const x=(i)=> padL + (W-padL-padR)*(data.length===1?0.5:i/(data.length-1));
+    const y=(p)=> padT + (H-padT-padB)*(1-(p-min)/rng);
+
+    // Gitter + Achsenbeschriftung (5 Linien)
+    ctx.strokeStyle="#1d2c45";ctx.fillStyle="#8aa0bf";ctx.font="11px sans-serif";ctx.textAlign="right";
+    for(let g=0;g<=4;g++){
+      const p=min+rng*g/4; const yy=y(p);
+      ctx.beginPath();ctx.moveTo(padL,yy);ctx.lineTo(W-padR,yy);ctx.stroke();
+      ctx.fillText(fmtNum(p),padL-8,yy+4);
+    }
+
+    // Kurslinie durch Trade-Punkte
+    ctx.strokeStyle="#3b82f6";ctx.lineWidth=2;ctx.beginPath();
+    data.forEach((d,i)=>{const xx=x(i),yy=y(Number(d.price));i===0?ctx.moveTo(xx,yy):ctx.lineTo(xx,yy);});
+    ctx.stroke();
+
+    // Kauf/Verkauf Marker
+    data.forEach((d,i)=>{
+      const xx=x(i),yy=y(Number(d.price));
+      const buy = d.side==="buy";
+      ctx.fillStyle = buy ? "#16c784" : "#ea3943";
+      ctx.beginPath();ctx.arc(xx,yy,6,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle="#0e1726";ctx.beginPath();ctx.arc(xx,yy,2.5,0,Math.PI*2);ctx.fill();
+    });
+
+    // X-Achse: erstes und letztes Datum
+    ctx.fillStyle="#8aa0bf";ctx.font="11px sans-serif";ctx.textAlign="left";
+    ctx.fillText(fmtTime(data[0].created_at),padL,H-14);
+    ctx.textAlign="right";
+    ctx.fillText(fmtTime(data[data.length-1].created_at),W-padR,H-14);
+  }
+
+  function renderStats(){
+    const data = trades.filter(t=>t.symbol===aktiv);
+    const kaeufe = data.filter(d=>d.side==="buy").length;
+    const verk   = data.filter(d=>d.side==="sell").length;
+    el("stats").innerHTML =
+      `<div class="stat"><div class="k">Trades</div><div class="v">${data.length}</div></div>`+
+      `<div class="stat"><div class="k">Käufe</div><div class="v" style="color:var(--buy)">${kaeufe}</div></div>`+
+      `<div class="stat"><div class="k">Verkäufe</div><div class="v" style="color:var(--sell)">${verk}</div></div>`;
+  }
+
+  function renderTabs(){
+    el("tabs").innerHTML = symbols.map(s=>
+      `<button class="tab ${s===aktiv?"active":""}" data-s="${s}">${s}</button>`).join("");
+    document.querySelectorAll(".tab").forEach(b=>{
+      b.addEventListener("click",()=>{aktiv=b.dataset.s;renderTabs();drawChart();renderStats();});
+    });
+  }
+
+  function renderTable(){
+    const rows = trades.slice(0,40).map(t=>
+      `<tr><td>${fmtTime(t.created_at)}</td>`+
+      `<td class="${t.side==='buy'?'buy':'sell'}">${t.side==='buy'?'KAUF':'VERKAUF'}</td>`+
+      `<td>${t.symbol}</td><td>${fmtMoney(t.notional)}</td><td>${fmtNum(t.price)}</td></tr>`).join("");
+    el("tbody").innerHTML = rows || `<tr><td colspan="5" class="status">Noch keine Trades.</td></tr>`;
+  }
+
+  async function load(){
+    if(!cfgOk()){ el("foot").innerHTML='<span class="err">Bitte SUPABASE_ANON_KEY eintragen.</span>'; return; }
+    try{
+      trades = await rest("bot_trades?select=*&order=created_at.desc&limit=500");
+      symbols = [...new Set(trades.map(t=>t.symbol))];
+      if(symbols.length===0){ symbols=[]; }
+      if(!aktiv || !symbols.includes(aktiv)) aktiv = symbols[0] || null;
+      renderTabs(); drawChart(); renderStats(); renderTable();
+      el("foot").textContent = "Stand: "+new Date().toLocaleTimeString("de-DE")+" · aktualisiert alle 30 s.";
+    }catch(e){
+      el("foot").innerHTML = '<span class="err">Fehler: '+e.message+'</span>';
+    }
+  }
+
+  load();
+  setInterval(load, 30000);
+})();
+</script>
+</body>
+</html>

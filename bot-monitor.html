@@ -105,6 +105,51 @@
 </div>
 
 <div class="card">
+  <div class="ctitle">&#128210; Mein Handelstagebuch (echte Trades)</div>
+  <div class="ctrl-row">
+    <div class="field">
+      <label for="jSymbol">Symbol</label>
+      <input id="jSymbol" type="text" placeholder="z. B. BTC/USD oder AAPL">
+    </div>
+    <div class="field">
+      <label for="jSide">Kauf / Verkauf</label>
+      <select id="jSide" style="width:100%;padding:10px;border-radius:10px;border:2px solid var(--border);font-size:16px;">
+        <option value="buy">Kauf</option>
+        <option value="sell">Verkauf</option>
+      </select>
+    </div>
+  </div>
+  <div class="ctrl-row">
+    <div class="field">
+      <label for="jAmount">Betrag (&euro;)</label>
+      <input id="jAmount" type="number" inputmode="decimal" placeholder="z. B. 250">
+    </div>
+    <div class="field">
+      <label for="jPrice">Kurs</label>
+      <input id="jPrice" type="number" inputmode="decimal" placeholder="z. B. 68000">
+    </div>
+  </div>
+  <div class="ctrl-row">
+    <div class="field">
+      <label for="jNote">Notiz (optional)</label>
+      <input id="jNote" type="text" placeholder="z. B. crypto.com oder Sparkasse">
+    </div>
+    <div class="field">
+      <label for="jPw">Steuer-Passwort</label>
+      <input id="jPw" type="password" placeholder="Passwort">
+    </div>
+  </div>
+  <div class="btns">
+    <button id="journalBtn" class="start">&#128221; Eintrag speichern</button>
+  </div>
+  <div class="ctrl-msg" id="journalMsg"></div>
+  <table style="margin-top:10px;">
+    <thead><tr><th>Zeit</th><th>Seite</th><th>Symbol</th><th>Betrag</th><th>Kurs</th><th>Notiz</th></tr></thead>
+    <tbody id="journalRows"><tr><td colspan="6" class="empty">Noch keine Eintr&auml;ge.</td></tr></tbody>
+  </table>
+</div>
+
+<div class="card">
   <div class="ctitle">&#128221; Protokoll (letzte Takte)</div>
   <div class="log" id="logBox"><div class="empty">Lade &hellip;</div></div>
 </div>
@@ -118,8 +163,8 @@
   "use strict";
 
   // ===== CONFIG - HIER EINTRAGEN ============================================
-  const SUPABASE_URL      = "https://pukixlbdbdbbsmqobfhj.supabase.co";   // <-- aendern
-  const SUPABASE_ANON_KEY = "sb_publishable_QTRcFqfszQn1edHacj7lFw__b2dpOkF";                      // <-- aendern
+  const SUPABASE_URL      = "https://DEIN_PROJEKT.supabase.co";   // <-- aendern
+  const SUPABASE_ANON_KEY = "DEIN_ANON_KEY";                      // <-- aendern
   // ==========================================================================
 
   const el=id=>document.getElementById(id);
@@ -167,6 +212,52 @@
   function msg(t,cls){const m=el("ctrlMsg");m.textContent=t;m.className="ctrl-msg "+(cls||"");}
   function setBtns(disabled){el("startBtn").disabled=disabled;el("stopBtn").disabled=disabled;}
 
+  // ----- Handelstagebuch -----
+  function jmsg(t,cls){const m=el("journalMsg");m.textContent=t;m.className="ctrl-msg "+(cls||"");}
+
+  async function saveJournal(){
+    const pw=el("jPw").value;
+    const symbol=el("jSymbol").value.trim();
+    const side=el("jSide").value;
+    const amount=parseFloat(el("jAmount").value);
+    const price=parseFloat(el("jPrice").value);
+    const note=el("jNote").value.trim();
+    if(!symbol){ jmsg("Bitte Symbol eingeben.","err"); return; }
+    if(!pw){ jmsg("Bitte Passwort eingeben.","err"); return; }
+    el("journalBtn").disabled=true;
+    jmsg("Speichere ...","");
+    try{
+      const r=await fetch(base()+"/functions/v1/bot-control-ts",{
+        method:"POST",
+        headers:{"Content-Type":"application/json",apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+SUPABASE_ANON_KEY},
+        body:JSON.stringify({password:pw,action:"journal",symbol:symbol,side:side,
+          amount:isNaN(amount)?null:amount,price:isNaN(price)?null:price,note:note})
+      });
+      const d=await r.json();
+      if(!r.ok||d.error){ jmsg(d.error||("Fehler "+r.status),"err"); }
+      else{
+        jmsg("\u2713 Eintrag gespeichert.","ok");
+        el("jSymbol").value="";el("jAmount").value="";el("jPrice").value="";el("jNote").value="";
+        loadJournal();
+      }
+    }catch(e){ jmsg("Fehler: "+e.message,"err"); }
+    el("journalBtn").disabled=false;
+  }
+
+  async function loadJournal(){
+    try{
+      const rows=await rest("bot_journal?select=*&order=created_at.desc&limit=50");
+      const tb=el("journalRows");
+      if(!rows.length){ tb.innerHTML='<tr><td colspan="6" class="empty">Noch keine Eintr\u00e4ge.</td></tr>'; return; }
+      tb.innerHTML=rows.map(t=>{
+        const d=new Date(t.created_at);
+        const zeit=d.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})+" "+d.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"});
+        const seite=t.side==="buy"?'<span style="color:var(--green);font-weight:700">KAUF</span>':'<span style="color:var(--red);font-weight:700">VERKAUF</span>';
+        return `<tr><td>${zeit}</td><td>${seite}</td><td>${t.symbol}</td><td>${t.amount!=null?fmt(t.amount)+" \u20ac":"\u2013"}</td><td>${t.price!=null?fmt(t.price):"\u2013"}</td><td>${t.note||""}</td></tr>`;
+      }).join("");
+    }catch(e){ /* Tabelle evtl. noch nicht angelegt - still ignorieren */ }
+  }
+
   async function load(){
     if(!configured()){el("setupCard").style.display="block";setLive(false,"nicht eingerichtet");return;}
     try{
@@ -205,9 +296,12 @@
 
   el("startBtn").addEventListener("click",function(){control("start");});
   el("stopBtn").addEventListener("click",function(){control("stop");});
+  el("journalBtn").addEventListener("click",function(){saveJournal();});
 
   load();
+  loadJournal();
   setInterval(load,10000);
+  setInterval(loadJournal,30000);
 })();
 </script>
 </body>
